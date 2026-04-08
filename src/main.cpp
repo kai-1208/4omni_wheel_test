@@ -5,7 +5,6 @@
 #include "BNO055Uart.hpp"
 #include "pid.hpp"
 #include "c610.hpp"
-#include "mechanism.hpp"
 
 #define M_PI 3.14159265358979323846
 #define SPEED_SCALE 8000
