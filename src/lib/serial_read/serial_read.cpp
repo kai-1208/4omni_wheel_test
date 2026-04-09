@@ -66,6 +66,8 @@ void serial_read() {
             } else {
                 key_puress(msg);
             }
+        } else {
+            move_stop();
         }
         // ThisThread::sleep_for(10ms);
     }

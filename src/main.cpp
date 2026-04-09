@@ -9,7 +9,7 @@
 #define M_PI 3.14159265358979323846
 #define SPEED_SCALE 6000
 #define MECH_SCALE 10000
-#define ROLLER_SCALE 0.4
+#define ROLLER_SCALE 0.35
 
 BufferedSerial pc(USBTX, USBRX, 115200);
 serial_unit serial(pc);
@@ -26,10 +26,10 @@ C610 DJI1(can1);
 
 // pid設定
 PID wheel_pid[4] = {
-    PID(0.8, 0.6, 0.0, PID::Mode::VELOCITY),
-    PID(0.8, 0.6, 0.0, PID::Mode::VELOCITY),
-    PID(0.8, 0.6, 0.0, PID::Mode::VELOCITY),
-    PID(0.8, 0.6, 0.0, PID::Mode::VELOCITY)
+    PID(1.1, 0.6, 0.0, PID::Mode::VELOCITY),
+    PID(1.1, 0.6, 0.0, PID::Mode::VELOCITY),
+    PID(1.1, 0.6, 0.0, PID::Mode::VELOCITY),
+    PID(1.1, 0.6, 0.0, PID::Mode::VELOCITY)
 };
 
 double wheel_pid_output[4] = {0};
@@ -184,10 +184,10 @@ void move_aa(std::string msg) {
     speed = hypot(lx, ly);
 
     // 各ホイールの速度を計算
-    wheel_speeds[0] = (speed * cos(theta - M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
-    wheel_speeds[1] = (speed * cos(theta - 3*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
-    wheel_speeds[2] = (speed * cos(theta - 5*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
-    wheel_speeds[3] = (speed * cos(theta - 7*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
+    wheel_speeds[2] = (speed * cos(theta - M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
+    wheel_speeds[3] = (speed * cos(theta - 3*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
+    wheel_speeds[0] = (speed * cos(theta - 5*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
+    wheel_speeds[1] = (speed * cos(theta - 7*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
 
 
     for (int i = 0; i < 4; ++i) {
@@ -216,6 +216,13 @@ void move_aa(std::string msg) {
     // printf("%f, %f, %f, %f, %f, %f, %f\n", wheel_speeds[0], wheel_speeds[1], wheel_speeds[2], wheel_speeds[3], theta, speed, relative_yaw);
 
     ThisThread::sleep_for(15ms);
+}
+
+void move_stop() {
+    for (int i = 0; i < 4; ++i) {
+        DJI1.set_power(i+1, 0);
+        ThisThread::sleep_for(10ms);
+    }
 }
 
 /**
