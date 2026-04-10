@@ -1,6 +1,8 @@
 #include "cmath"
-#include "key.hpp"
 #include "mbed.h"
+#include "atomic"
+
+#include "key.hpp"
 #include "serial_read.hpp"
 #include "BNO055Uart.hpp"
 #include "pid.hpp"
@@ -32,11 +34,9 @@ PID wheel_pid[4] = {
     PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY)
 };
 
-double wheel_pid_output[4] = {0};
-
-// aifubdsih
 uint8_t data1[8] = {};
-double wheel_speeds[4];
+std::atomic<double> target_wheel_speeds[4] = {0.0};
+double wheel_pid_output[4] = {0};
 
 double theta = 0.0;
 double speed = 0.0;
@@ -45,57 +45,6 @@ double relative_yaw = 0.0;
 int16_t pwm[4] = {0};
 
 int stop_count = 0;
-
-/**
- * @brief imuを更新
- */
-void imu_polling() {
-    int consecutive_fail = 0;
-    const int FAIL_THRESHOLD = 8; // 8回連続で失敗したら再初期化
-
-    while (true) {
-        if (imu_available) {
-            if (imu.update()) {
-                consecutive_fail = 0;
-                // printf("imu: update success, yaw: %f\n", relative_yaw);
-            } else {
-                consecutive_fail++;
-                // printf("imu: update failed: %d, yaw: %f\n", consecutive_fail, relative_yaw);
-                // if (consecutive_fail == 1) {
-                //     // 最初の失敗はログだけ
-                //     printf("imu: read failed (1)\n");
-                // }
-            }
-
-            if (consecutive_fail >= FAIL_THRESHOLD) {
-                printf("imu: %d consecutive failures. Attempting re-init...\n", consecutive_fail);
-                // 再初期化
-                if (imu.begin()) {
-                    printf("imu: re-init success\n");
-                    imu.update();
-                    // yaw_offset = imu.getEuler().yaw; // オフセットは再設定しない
-                    consecutive_fail = 0;
-                    imu_available = true;
-                } else {
-                    printf("imu: re-init failed\n");
-                    wheel_speeds[4] = {0};
-                    imu_available = false;
-                    // 次は長めに待ってから再試行
-                    ThisThread::sleep_for(500ms);
-                    consecutive_fail = 0;
-                }
-            }
-        } else {
-            if (imu.begin()) {
-                imu_available = true;
-                printf("imu: became available\n");
-            } else {
-                ThisThread::sleep_for(500ms);
-            }
-        }
-        ThisThread::sleep_for(20ms);
-    }
-}
 
 /**
  * @brief pid制御 omniだけ
@@ -113,43 +62,17 @@ void pid_control() {
     while (true) {
         auto now_time = HighResClock::now();
         float dt = std::chrono::duration_cast<std::chrono::microseconds>(now_time - pre_time).count() / 1000000.0f;
-        for (int i = 0; i < 4; ++i) {
-            wheel_pid[i].set_dt(dt);
-        }
         pre_time = now_time;
 
-        ThisThread::sleep_for(10ms);
-    }
-}
+        for (int i = 0; i < 4; ++i) {
+            wheel_pid[i].set_dt(dt);
+            wheel_pid[i].set_goal(target_wheel_speeds[i]);
 
-/**
- * @brief imuからyaw角を取得
- */
-void imu_get_yaw() {
-    if (imu.begin()) {
-        ThisThread::sleep_for(100ms); // imu安定するまで待つ
-        imu.update();
-        yaw_offset = imu.getEuler().yaw; // 最初のヨー角
-        printf("Yaw offset set to: %.2f\n", yaw_offset);
-    } else {
-        printf("Failed to initialize BNO055.\n");
-        while(1);
-    }
-
-    while (true) {
-        if (imu.update()) {
-            BNO055Uart::EulerAngles angles = imu.getEuler();
-            relative_yaw = angles.yaw - yaw_offset; // ヨー角をoffset修正
-
-            // 角度を-180～180度に
-            if (relative_yaw > 180.0f) relative_yaw -= 360.0f;
-            if (relative_yaw < -180.0f) relative_yaw += 360.0f;
-
-            printf("Yaw: %7.2f\n", relative_yaw);
-        } else {
-            printf("Failed to update sensor data.\n");
+            wheel_pid_output[i] = wheel_pid[i].do_pid(DJI1.get_rpm(i+1));
+            DJI1.set_power(i+1, wheel_pid_output[i]);
         }
-        ThisThread::sleep_for(100ms);
+
+        ThisThread::sleep_for(10ms);
     }
 }
 
@@ -186,27 +109,27 @@ void move_aa(std::string msg) {
     speed = hypot(lx, ly);
 
     // 各ホイールの速度を計算
-    wheel_speeds[0] = (speed * cos(theta - M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
-    wheel_speeds[1] = (speed * cos(theta - 3*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
-    wheel_speeds[2] = (speed * cos(theta - 5*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
-    wheel_speeds[3] = (speed * cos(theta - 7*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
+    target_wheel_speeds[0] = (speed * cos(theta - M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
+    target_wheel_speeds[1] = (speed * cos(theta - 3*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
+    target_wheel_speeds[2] = (speed * cos(theta - 5*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
+    target_wheel_speeds[3] = (speed * cos(theta - 7*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
 
 
-    for (int i = 0; i < 4; ++i) {
-        wheel_pid_output[i] = wheel_pid[i].do_pid(DJI1.get_rpm(i+1));
-        wheel_pid[i].set_goal(wheel_speeds[i]);
-        DJI1.set_power(i+1, wheel_pid_output[i]);
-        // if (i == 3) printf("%f\n", wheel_pid[i].do_pid(DJI1.get_rpm(i+1)));
-        // else printf("%f, ", wheel_pid[i].do_pid(DJI1.get_rpm(i+1)));
-        // if (i == 3) printf("%d\n", DJI1.get_rpm(i+1));
-        // else printf("%d, ", DJI1.get_rpm(i+1));
-    }
+    // for (int i = 0; i < 4; ++i) {
+    //     wheel_pid_output[i] = wheel_pid[i].do_pid(DJI1.get_rpm(i+1));
+    //     wheel_pid[i].set_goal(target_wheel_speeds[i]);
+    //     DJI1.set_power(i+1, wheel_pid_output[i]);
+    //     // if (i == 3) printf("%f\n", wheel_pid[i].do_pid(DJI1.get_rpm(i+1)));
+    //     // else printf("%f, ", wheel_pid[i].do_pid(DJI1.get_rpm(i+1)));
+    //     // if (i == 3) printf("%d\n", DJI1.get_rpm(i+1));
+    //     // else printf("%d, ", DJI1.get_rpm(i+1));
+    // }
 
     // ↓はc610.hppを使用しないcan通信
     
     // int16_t pwm_outputs[4];
     // for (int i = 0; i < 4; ++i) {
-    //     pwm_outputs[i] = static_cast<int16_t>(wheel_speeds[i]);
+    //     pwm_outputs[i] = static_cast<int16_t>(target_wheel_speeds[i]);
     // }
 
     // for (int i = 0; i < 4; ++i) {
@@ -215,7 +138,7 @@ void move_aa(std::string msg) {
     //     data1[i * 2 + 1] = static_cast<uint8_t>(v & 0xFF);        // LSB
     // }
 
-    // printf("%f, %f, %f, %f, %f, %f, %f\n", wheel_speeds[0], wheel_speeds[1], wheel_speeds[2], wheel_speeds[3], theta, speed, relative_yaw);
+    // printf("%f, %f, %f, %f, %f, %f, %f\n", target_wheel_speeds[0], target_wheel_speeds[1], target_wheel_speeds[2], target_wheel_speeds[3], theta, speed, relative_yaw);
 
     ThisThread::sleep_for(15ms);
 }
@@ -299,20 +222,12 @@ void button_event() {
  */
 void c610_can_send() {
     while (true) {
-        // printf("theta: %f, speed: %f, Triangle: %d, Cross: %d, Up: %d, Down: %d, R1: %d, L1: %d, R2: %d, L2: %d\n", theta, speed, Triangle, Cross, Up, Down, R1, L1, R2, L2);
-        if (DJI1.send_message()) {
-            // printf("%f, %f, %f, %f, %f, %f, %f\n", wheel_pid_output[0], wheel_pid_output[1], wheel_pid_output[2], wheel_pid_output[3], theta, speed, relative_yaw);
-        } else {
-            // printf("CAN1 Send Failed, ");
-        }
+        DJI1.send_message();
+
         CANMessage msg(4, (const uint8_t*)pwm, 8);
-        if (can2.write(msg)) {
-        } else {
-            // printf("CAN2 Send Failed\n");
-        }
-        // printf("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n", Triangle, Cross, Up, Down, R1, L1, R2, L2, pwm[0], pwm[1], pwm[2], pwm[3]);
+        can2.write(msg)
         // printf("1: %f, 2: %f, 3: %f, 4: %f\n", wheel_pid_output[0], wheel_pid_output[1], wheel_pid_output[2], wheel_pid_output[3]);
-        ThisThread::sleep_for(30ms);
+        ThisThread::sleep_for(5ms);
     }
 }
 
@@ -349,7 +264,7 @@ int main() {
         // printf("%f\n", relative_yaw);
         
         // if (DJI1.send_message()) {
-        //     printf("%f, %f, %f, %f, %f, %f, %f\n", wheel_speeds[0], wheel_speeds[1], wheel_speeds[2], wheel_speeds[3], theta, speed, relative_yaw);
+        //     printf("%f, %f, %f, %f, %f, %f, %f\n", target_wheel_speeds[0], target_wheel_speeds[1], target_wheel_speeds[2], target_wheel_speeds[3], theta, speed, relative_yaw);
         // } else {
         //     printf("CAN Send Failed\n");
         // }
@@ -372,7 +287,7 @@ int main() {
 
         // CANMessage can_msg(0x200, data1, sizeof(data1));
         // if (can1.write(can_msg)) {
-        //     printf("%f, %f, %f, %f\n", wheel_speeds[0], wheel_speeds[1], wheel_speeds[2], wheel_speeds[3]);
+        //     printf("%f, %f, %f, %f\n", target_wheel_speeds[0], target_wheel_speeds[1], target_wheel_speeds[2], target_wheel_speeds[3]);
         // } else {
         //     // printf("CAN Send Failed\n");
         // }
