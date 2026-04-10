@@ -42,7 +42,7 @@ double theta = 0.0;
 double speed = 0.0;
 double relative_yaw = 0.0;
 
-int16_t pwm[4] = {0};
+std::atomic<int16_t> pwm[4] = {0};
 
 int stop_count = 0;
 
@@ -79,7 +79,7 @@ void pid_control() {
 /**
  * @brief ps4コントローラーの入力値の取得&4輪オムニ制御
  */
-void move_aa(std::string msg) {
+void move_aa(const std::string msg) {
     msg.erase(0, 2);
     std::vector<double> joys_d = to_numbers(msg);
     std::vector<float> joys(joys_d.begin(), joys_d.end());
@@ -92,27 +92,15 @@ void move_aa(std::string msg) {
     float ly = -joys[1]; // lスティックのy座標を反転
     float rx = joys[2];
 
-    // IMUから現在のヨー角を取得
-    if (imu_available) {
-        BNO055Uart::EulerAngles angles = imu.getEuler();
-        double current_yaw = angles.yaw - yaw_offset;
-
-        // 角度を-180度から180度の範囲に正規化
-        while (current_yaw > 180.0) current_yaw -= 360.0;
-        while (current_yaw < -180.0) current_yaw += 360.0;
-        relative_yaw = current_yaw;
-    }
-
     // フィールド座標系を基準とした移動量の計算
-    double yaw_rad = relative_yaw * M_PI / 180.0;
     theta = atan2(ly, lx);
     speed = hypot(lx, ly);
 
     // 各ホイールの速度を計算
-    target_wheel_speeds[0] = (speed * cos(theta - M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
-    target_wheel_speeds[1] = (speed * cos(theta - 3*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
-    target_wheel_speeds[2] = (speed * cos(theta - 5*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
-    target_wheel_speeds[3] = (speed * cos(theta - 7*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
+    target_wheel_speeds[0] = (speed * cos(theta - M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
+    target_wheel_speeds[1] = (speed * cos(theta - 3*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
+    target_wheel_speeds[2] = (speed * cos(theta - 5*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
+    target_wheel_speeds[3] = (speed * cos(theta - 7*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
 
 
     // for (int i = 0; i < 4; ++i) {
@@ -140,17 +128,8 @@ void move_aa(std::string msg) {
 
     // printf("%f, %f, %f, %f, %f, %f, %f\n", target_wheel_speeds[0], target_wheel_speeds[1], target_wheel_speeds[2], target_wheel_speeds[3], theta, speed, relative_yaw);
 
-    ThisThread::sleep_for(15ms);
+    ThisThread::sleep_for(5ms);
 }
-
-// void move_stop() {
-    // for (int i = 0; i < 4; ++i) {
-        // stop_count++;
-        // printf("stop_count: %d\n", stop_count);
-        // DJI1.set_power(i+1, 0);
-        // ThisThread::sleep_for(10ms);
-    // }
-// }
 
 /**
  * @brief ps4コントローラーのボタンの入力を取得&機構制御
@@ -185,34 +164,6 @@ void button_event() {
         } else {
             pwm[3] = 0;
         }
-        // if (Triangle) {
-        //     DJI2.set_power(1, SPEED_SCALE);
-        // } else if (Cross) {
-        //     DJI2.set_power(1, -SPEED_SCALE);
-        // } else {
-        //     DJI2.set_power(1, 0);
-        // }
-        // if (Up) {
-        //     DJI2.set_power(2, SPEED_SCALE);
-        // } else if (Down) {
-        //     DJI2.set_power(2, -SPEED_SCALE);
-        // } else {
-        //     DJI2.set_power(2, 0);
-        // }
-        // if (R1) {
-        //     DJI2.set_power(3, SPEED_SCALE);
-        // } else if (L1) {
-        //     DJI2.set_power(3, -SPEED_SCALE);
-        // } else {
-        //     DJI2.set_power(3, 0);
-        // }
-        // if (R2) {
-        //     DJI2.set_power(4, SPEED_SCALE);
-        // } else if (L2) {
-        //     DJI2.set_power(4, -SPEED_SCALE);
-        // } else {
-        //     DJI2.set_power(4, 0);
-        // }
         ThisThread::sleep_for(10ms);
     }
 }
@@ -234,22 +185,6 @@ void c610_can_send() {
 
 // main
 int main() {
-    // if (imu.begin()) {
-    //     printf("BNO055 Initialized!\n");
-    //     ThisThread::sleep_for(100ms);
-    //     imu.update();
-    //     yaw_offset = imu.getEuler().yaw;
-    //     printf("Yaw offset set to: %.2f\n", yaw_offset);
-    //     imu_available = true;
-    // } else {
-    //     printf("Failed to initialize BNO055. Running without IMU.\n");
-    //     imu_available = false;
-    // }
-
-    // Thread imu_thread;
-    // imu_thread.start(imu_polling);
-    // Thread imu_read_thread;
-    // imu_read_thread.start(imu_get_yaw);
     Thread serial_thread;
     serial_thread.start(serial_read);
     pc.set_blocking(false);
