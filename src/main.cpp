@@ -26,10 +26,10 @@ C610 DJI1(can1);
 
 // pid設定
 PID wheel_pid[4] = {
-    PID(1.1, 0.6, 0.0, PID::Mode::VELOCITY),
-    PID(1.1, 0.6, 0.0, PID::Mode::VELOCITY),
-    PID(1.1, 0.6, 0.0, PID::Mode::VELOCITY),
-    PID(1.1, 0.6, 0.0, PID::Mode::VELOCITY)
+    PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY),
+    PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY),
+    PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY),
+    PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY)
 };
 
 double wheel_pid_output[4] = {0};
@@ -43,6 +43,8 @@ double speed = 0.0;
 double relative_yaw = 0.0;
 
 int16_t pwm[4] = {0};
+
+int stop_count = 0;
 
 /**
  * @brief imuを更新
@@ -184,10 +186,10 @@ void move_aa(std::string msg) {
     speed = hypot(lx, ly);
 
     // 各ホイールの速度を計算
-    wheel_speeds[2] = (speed * cos(theta - M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
-    wheel_speeds[3] = (speed * cos(theta - 3*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
-    wheel_speeds[0] = (speed * cos(theta - 5*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
-    wheel_speeds[1] = (speed * cos(theta - 7*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
+    wheel_speeds[0] = (speed * cos(theta - M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
+    wheel_speeds[1] = (speed * cos(theta - 3*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
+    wheel_speeds[2] = (speed * cos(theta - 5*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
+    wheel_speeds[3] = (speed * cos(theta - 7*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
 
 
     for (int i = 0; i < 4; ++i) {
@@ -218,12 +220,14 @@ void move_aa(std::string msg) {
     ThisThread::sleep_for(15ms);
 }
 
-void move_stop() {
-    for (int i = 0; i < 4; ++i) {
-        DJI1.set_power(i+1, 0);
-        ThisThread::sleep_for(10ms);
-    }
-}
+// void move_stop() {
+    // for (int i = 0; i < 4; ++i) {
+        // stop_count++;
+        // printf("stop_count: %d\n", stop_count);
+        // DJI1.set_power(i+1, 0);
+        // ThisThread::sleep_for(10ms);
+    // }
+// }
 
 /**
  * @brief ps4コントローラーのボタンの入力を取得&機構制御
@@ -306,7 +310,8 @@ void c610_can_send() {
         } else {
             // printf("CAN2 Send Failed\n");
         }
-        printf("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n", Triangle, Cross, Up, Down, R1, L1, R2, L2, pwm[0], pwm[1], pwm[2], pwm[3]);
+        // printf("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n", Triangle, Cross, Up, Down, R1, L1, R2, L2, pwm[0], pwm[1], pwm[2], pwm[3]);
+        // printf("1: %f, 2: %f, 3: %f, 4: %f\n", wheel_pid_output[0], wheel_pid_output[1], wheel_pid_output[2], wheel_pid_output[3]);
         ThisThread::sleep_for(30ms);
     }
 }
