@@ -44,18 +44,30 @@ std::string serial_unit::read_serial()
 
 
 void serial_read() {
+    int serial_count = 0;
+    mbed::HighResClock::time_point now_time = HighResClock::now();
+    mbed::HighResClock::time_point pre_time = HighResClock::now();
     while (1) {
+        now_time = HighResClock::now();
         // printf("serial_read\n");
-        std::string msg = serial.read_serial();
-        if (msg != "") {
-            if (msg[0] == 'n') {
-                move_aa(msg);
+        if (now_time - pre_time > 1ms) {
+            std::string msg = serial.read_serial();
+            if (msg != "") {
+                is_serial_timeout = false;
+                serial_count = 0;
+                if (msg[0] == 'n') {
+                    move_aa(msg);
+                } else {
+                    key_puress(msg);
+                }
             } else {
-                key_puress(msg);
+                serial_count++;
             }
-        } else {
-            // move_stop();
+            
+            if (serial_count > 1000) { // 1秒間メッセージが来ない場合
+                is_serial_timeout = true;
+            }
         }
-        // ThisThread::sleep_for(10ms);
+        // ThisThread::sleep_for(1ms);
     }
 }

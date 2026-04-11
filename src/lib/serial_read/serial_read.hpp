@@ -19,6 +19,7 @@ public:
 
 // language: cpp
 extern serial_unit serial;
+extern bool is_serial_timeout;
 void key_binding();
 void serial_read();
 void move_aa(std::string msg);

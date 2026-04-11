@@ -44,6 +44,8 @@ double relative_yaw = 0.0;
 
 std::atomic<int16_t> pwm[4] = {0};
 
+bool is_serial_timeout = false;
+
 /**
  * @brief pid制御 omniだけ
  */
@@ -66,7 +68,11 @@ void pid_control() {
             wheel_pid[i].set_dt(dt);
             wheel_pid[i].set_goal(static_cast<double>(target_wheel_speeds[i].load()));
 
-            wheel_pid_output[i] = wheel_pid[i].do_pid(DJI1.get_rpm(i+1));
+            if (is_serial_timeout) {
+                wheel_pid_output[i] = 0;
+            } else {
+                wheel_pid_output[i] = wheel_pid[i].do_pid(DJI1.get_rpm(i+1));
+            }
             DJI1.set_power(i+1, wheel_pid_output[i]);
         }
 
