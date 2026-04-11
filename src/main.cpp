@@ -28,10 +28,10 @@ C610 DJI1(can1);
 
 // pid設定
 PID wheel_pid[4] = {
-    PID(0.9, 0.7, 0.0, PID::Mode::VELOCITY),
-    PID(0.9, 0.7, 0.0, PID::Mode::VELOCITY),
-    PID(0.9, 0.7, 0.0, PID::Mode::VELOCITY),
-    PID(0.9, 0.7, 0.0, PID::Mode::VELOCITY)
+    PID(1.0, 0.7, 0.0, PID::Mode::VELOCITY),
+    PID(1.0, 0.7, 0.0, PID::Mode::VELOCITY),
+    PID(1.0, 0.7, 0.0, PID::Mode::VELOCITY),
+    PID(1.0, 0.7, 0.0, PID::Mode::VELOCITY)
 };
 
 uint8_t data1[8] = {};
