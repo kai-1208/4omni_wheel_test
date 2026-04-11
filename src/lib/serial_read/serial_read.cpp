@@ -49,19 +49,6 @@ void serial_read() {
         std::string msg = serial.read_serial();
         if (msg != "") {
             if (msg[0] == 'n') {
-                // if (R3 && Right) {
-                //     msg = "n:-0.500000:0.000000:0.000000:0.000000|";
-                //     printf("Updated msg: %s\n", msg.c_str()); // 増加した値を表示
-                // } else if (R3 && Left) {
-                //     msg = "n:0.500000:0.000000:0.000000:0.000000|";
-                //     printf("Updated msg: %s\n", msg.c_str()); // 増加した値を表示
-                // } else if (R3 && Up) {
-                //     msg = "n:0.000000:0.500000:0.000000:0.000000|";
-                //     printf("Updated msg: %s\n", msg.c_str()); // 増加した値を表示
-                // } else if (R3 && Down) {
-                //     msg = "n:0.000000:-0.500000:0.000000:0.000000|";
-                //     printf("Updated msg: %s\n", msg.c_str()); // 増加した値を表示
-                // }
                 move_aa(msg);
             } else {
                 key_puress(msg);

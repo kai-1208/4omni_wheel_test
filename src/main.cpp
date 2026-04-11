@@ -28,23 +28,21 @@ C610 DJI1(can1);
 
 // pid設定
 PID wheel_pid[4] = {
-    PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY),
-    PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY),
-    PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY),
-    PID(1.1, 0.0, 0.0, PID::Mode::VELOCITY)
+    PID(0.9, 0.7, 0.0, PID::Mode::VELOCITY),
+    PID(0.9, 0.7, 0.0, PID::Mode::VELOCITY),
+    PID(0.9, 0.7, 0.0, PID::Mode::VELOCITY),
+    PID(0.9, 0.7, 0.0, PID::Mode::VELOCITY)
 };
 
 uint8_t data1[8] = {};
-std::atomic<double> target_wheel_speeds[4] = {0.0};
+std::atomic<float> target_wheel_speeds[4] = {0.0f};
 double wheel_pid_output[4] = {0};
 
 double theta = 0.0;
 double speed = 0.0;
-double relative_yaw = 0.0;
+double relative_yaw = 0.0;  
 
 std::atomic<int16_t> pwm[4] = {0};
-
-int stop_count = 0;
 
 /**
  * @brief pid制御 omniだけ
@@ -66,7 +64,7 @@ void pid_control() {
 
         for (int i = 0; i < 4; ++i) {
             wheel_pid[i].set_dt(dt);
-            wheel_pid[i].set_goal(target_wheel_speeds[i]);
+            wheel_pid[i].set_goal(static_cast<double>(target_wheel_speeds[i].load()));
 
             wheel_pid_output[i] = wheel_pid[i].do_pid(DJI1.get_rpm(i+1));
             DJI1.set_power(i+1, wheel_pid_output[i]);
@@ -79,7 +77,7 @@ void pid_control() {
 /**
  * @brief ps4コントローラーの入力値の取得&4輪オムニ制御
  */
-void move_aa(const std::string msg) {
+void move_aa(std::string msg) {
     msg.erase(0, 2);
     std::vector<double> joys_d = to_numbers(msg);
     std::vector<float> joys(joys_d.begin(), joys_d.end());
@@ -97,10 +95,10 @@ void move_aa(const std::string msg) {
     speed = hypot(lx, ly);
 
     // 各ホイールの速度を計算
-    target_wheel_speeds[0] = (speed * cos(theta - M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右前
-    target_wheel_speeds[1] = (speed * cos(theta - 3*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE; // 右後
-    target_wheel_speeds[2] = (speed * cos(theta - 5*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左後
-    target_wheel_speeds[3] = (speed * cos(theta - 7*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE; // 左前
+    target_wheel_speeds[0] = static_cast<float>((speed * cos(theta - M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE); // 右前
+    target_wheel_speeds[1] = static_cast<float>((speed * cos(theta - 3*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE); // 右後
+    target_wheel_speeds[2] = static_cast<float>((speed * cos(theta - 5*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE); // 左後
+    target_wheel_speeds[3] = static_cast<float>((speed * cos(theta - 7*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE); // 左前
 
 
     // for (int i = 0; i < 4; ++i) {
@@ -176,7 +174,7 @@ void c610_can_send() {
         DJI1.send_message();
 
         CANMessage msg(4, (const uint8_t*)pwm, 8);
-        can2.write(msg)
+        can2.write(msg);
         // printf("1: %f, 2: %f, 3: %f, 4: %f\n", wheel_pid_output[0], wheel_pid_output[1], wheel_pid_output[2], wheel_pid_output[3]);
         ThisThread::sleep_for(5ms);
     }
