@@ -73,7 +73,7 @@ void imu_read() {
             rel_yaw += 360.0f;
         }
 
-        printf("Yaw: %.2f \r\n", rel_yaw);
+        // printf("Yaw: %.2f \r\n", rel_yaw);
 
         ThisThread::sleep_for(10ms);
     }
