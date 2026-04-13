@@ -7,6 +7,7 @@
 #include "BNO055Uart.hpp"
 #include "pid.hpp"
 #include "c610.hpp"
+#include "WT901.hpp"
 
 #define M_PI 3.14159265358979323846
 #define SPEED_SCALE 6000
@@ -17,9 +18,8 @@ BufferedSerial pc(USBTX, USBRX, 115200);
 serial_unit serial(pc);
 
 // imu設定
-BNO055Uart imu(PA_9, PA_10);
-bool imu_available = false;
-float yaw_offset = 0.0f;
+WT901 imu(PA_0, PA_1, 115200);
+float rel_yaw = 0.0f;
 
 // can設定
 CAN can1(PA_11, PA_12, (int)1e6);
@@ -40,11 +40,45 @@ double wheel_pid_output[4] = {0};
 
 double theta = 0.0;
 double speed = 0.0;
-double relative_yaw = 0.0;  
 
 std::atomic<int16_t> pwm[4] = {0};
 
 bool is_serial_timeout = false;
+
+/**
+ * @brief imuからのデータの更新
+ */
+void imu_read() {
+    ThisThread::sleep_for(1000ms); // 起動後の安定化のため
+    // バッファに溜まった古いデータをクリア
+    for (int i = 0; i < 10; i++) {
+        imu.update();
+        ThisThread::sleep_for(10ms);
+    }
+    float init_yaw = imu.getYaw(); // 初期のYaw角を取得して基準にする
+    // printf("Initial Yaw: %.2f \r\n", init_yaw);
+
+    while (true) {
+        // imuのバッファを読んで最新データに更新する
+        imu.update();
+
+        // 欲しいデータ（今回はYaw角）だけを取得する
+        float curr_yaw = imu.getYaw();
+        rel_yaw = curr_yaw - init_yaw; // 初期値からの相対角度を計算
+
+        // 相対角度を-180°～180°の範囲に収める
+        if (rel_yaw > 180.0f) {
+            rel_yaw -= 360.0f;
+        } else if (rel_yaw < -180.0f) {
+            rel_yaw += 360.0f;
+        }
+
+        printf("Yaw: %.2f \r\n", rel_yaw);
+
+        ThisThread::sleep_for(10ms);
+    }
+}
+
 
 /**
  * @brief pid制御 omniだけ
@@ -97,14 +131,15 @@ void move_aa(std::string msg) {
     float rx = joys[2];
 
     // フィールド座標系を基準とした移動量の計算
+    float yaw_rad = rel_yaw * M_PI / 180.0f; // 相対角度をラジアンに変換
     theta = atan2(ly, lx);
     speed = hypot(lx, ly);
 
     // 各ホイールの速度を計算
-    target_wheel_speeds[0] = static_cast<float>((speed * cos(theta - M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE); // 右前
-    target_wheel_speeds[1] = static_cast<float>((speed * cos(theta - 3*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE); // 右後
-    target_wheel_speeds[2] = static_cast<float>((speed * cos(theta - 5*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE); // 左後
-    target_wheel_speeds[3] = static_cast<float>((speed * cos(theta - 7*M_PI/4) + rx * ROLLER_SCALE) * SPEED_SCALE); // 左前
+    target_wheel_speeds[0] = static_cast<float>((speed * cos(theta - M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE); // 右前
+    target_wheel_speeds[1] = static_cast<float>((speed * cos(theta - 3*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE); // 右後
+    target_wheel_speeds[2] = static_cast<float>((speed * cos(theta - 5*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE); // 左後
+    target_wheel_speeds[3] = static_cast<float>((speed * cos(theta - 7*M_PI/4 - yaw_rad) + rx * ROLLER_SCALE) * SPEED_SCALE); // 左前
 
 
     // for (int i = 0; i < 4; ++i) {
@@ -189,6 +224,8 @@ void c610_can_send() {
 
 // main
 int main() {
+    Thread imu_thread;
+    imu_thread.start(imu_read);
     Thread serial_thread;
     serial_thread.start(serial_read);
     pc.set_blocking(false);
